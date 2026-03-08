@@ -1,6 +1,7 @@
 services:
   # Frontend (React - Vite build, served by npm serve)
   frontend:
+    image: ${DOCKER_USER:-witcherr}/candor-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -18,16 +19,17 @@ services:
 
   # Backend API (FastAPI — thin API, no PyTorch)
   backend:
+    image: ${DOCKER_USER:-witcherr}/candor-backend:latest
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
       args:
         DOCKER_BUILDKIT: 1
     container_name: candor_dust_backend
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///./candor_dust.db
-      - SECRET_KEY=candor-dust-secret-key-change-in-production
+      - SECRET_KEY=SECRET_KEY
       - MODEL_SERVICE_URL=http://model:8001
     ports:
       - "8000:8000"
@@ -41,6 +43,7 @@ services:
 
   # Model Service (Ray Serve — GPU inference)
   model:
+    image: ${DOCKER_USER:-witcherr}/candor-model:latest
     build:
       context: ./model
       dockerfile: Dockerfile

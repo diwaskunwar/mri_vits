@@ -14,13 +14,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # Copy pyproject.toml
-COPY backend/pyproject.toml /app/pyproject.toml
+COPY pyproject.toml /app/pyproject.toml
 
 # Install dependencies using uv (sync)
 RUN uv sync
 
 # Copy application code
-COPY backend/src /app/src
+COPY src /app/src
 
 # Create uploads directory
 RUN mkdir -p /app/uploads

@@ -1,0 +1,27 @@
+# Avoid sending large directories to the Docker daemon
+.git
+.venv
+venv
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.idea
+.vscode
+.env
+*.log
+
+# Ignore data/model artifacts
+backend/uploads/
+model/brain_tumor_vit_v0.1.0/
+model/*.pth
+model/*.pt
+model/*.h5
+model/*.h19
+model/*.weights
+
+# Ignore frontend build artifacts
+frontend/dist/
+frontend/node_modules/

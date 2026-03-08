@@ -59,3 +59,5 @@ results/
 recordings/
 
 *model/brain_tumor_vit_v0.1.0
+
+*backend/src/model
