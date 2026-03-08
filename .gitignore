@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+env/
+*.db
+*.db-journal
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+frontend/dist/
+.eslintcache
+
+# Environment
+.env
+.env.local
+.env.*.local
+*model/.env
+.env.development
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+.directory
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.settings/
+.classpath
+
+# Model files
+*.pth
+*.pt
+*.h5
+*.h19
+*.weights
+
+# Logs & Temp
+*.log
+*.tmp
+*.temp
+*.txt
+results/
+recordings/
+
+*model/brain_tumor_vit_v0.1.0

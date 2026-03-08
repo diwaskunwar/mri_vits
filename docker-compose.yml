@@ -1,0 +1,70 @@
+services:
+  # Frontend (React - Vite build, served by npm serve)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        DOCKER_BUILDKIT: 1
+        VITE_API_URL: http://localhost:8000
+    container_name: candor_dust_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - candor_network
+
+  # Backend API (FastAPI — thin API, no PyTorch)
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        DOCKER_BUILDKIT: 1
+    container_name: candor_dust_backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite:///./candor_dust.db
+      - SECRET_KEY=candor-dust-secret-key-change-in-production
+      - MODEL_SERVICE_URL=http://model:8001
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+    depends_on:
+      - model
+    networks:
+      - candor_network
+
+  # Model Service (Ray Serve — GPU inference)
+  model:
+    build:
+      context: ./model
+      dockerfile: Dockerfile
+      args:
+        DOCKER_BUILDKIT: 1
+    container_name: candor_dust_model
+    restart: unless-stopped
+    environment:
+      - MODEL_PATH=diwaskunwar10/brain-tumor-vit-candor
+      - REPLICAS=1
+    networks:
+      - candor_network
+    # Uncomment below for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+networks:
+  candor_network:
+    driver: bridge
+
+volumes:
+  uploads:
