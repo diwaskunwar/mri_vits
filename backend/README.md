@@ -40,7 +40,7 @@ We use **uv** for blazing-fast dependency management and environment isolation.
    ```
 2. **Launch API Server**:
    ```bash
-   uv run fastapi dev src/main.py --reload
+   uv run fastapi run src
    ```
    *The server will be available at http://localhost:8000. Interactive docs at /docs.*
 
