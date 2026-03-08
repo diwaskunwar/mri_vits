@@ -80,12 +80,9 @@ def vit_reshape_transform(tensor, height=14, width=14):
     return result
 
 
-def mc_dropout_predict(model, pixel_values, n_passes=20, dropout_p=0.1):
+def mc_dropout_predict(model, pixel_values, n_passes=10, dropout_p=0.1):
     """
-    Monte Carlo Dropout with explicit p injection.
-    
-    ViT-in21k has hidden_dropout_prob=0.0 by default, so we temporarily
-    inject dropout_p=0.1 to get genuine uncertainty estimates.
+    Monte Carlo Dropout with batched passes for speed.
     """
     original_ps = {}
     for name, module in model.named_modules():
@@ -98,14 +95,18 @@ def mc_dropout_predict(model, pixel_values, n_passes=20, dropout_p=0.1):
         if isinstance(module, nn.Dropout):
             module.train()
 
+    # Move to device
     pixel_values = pixel_values.to(next(model.parameters()).device)
+    
+    # Repeat image for batched inference
+    # Shape: [batch_size, 3, 224, 224] -> [n_passes * batch_size, 3, 224, 224]
+    batch_size = pixel_values.shape[0]
+    pixel_values_batched = pixel_values.repeat(n_passes, 1, 1, 1)
 
-    all_probs = []
     with torch.no_grad():
-        for _ in range(n_passes):
-            outputs = model(pixel_values=pixel_values)
-            probs = torch.softmax(outputs.logits.float(), dim=-1)[0].cpu().numpy()
-            all_probs.append(probs)
+        outputs = model(pixel_values=pixel_values_batched)
+        logits = outputs.logits.float()
+        all_probs = torch.softmax(logits, dim=-1).cpu().numpy()
 
     # Restore original p values
     for name, module in model.named_modules():
@@ -113,9 +114,13 @@ def mc_dropout_predict(model, pixel_values, n_passes=20, dropout_p=0.1):
             module.p = original_ps[name]
     model.eval()
 
-    all_probs = np.array(all_probs)
-    mean_probs = all_probs.mean(axis=0)
-    std_probs = all_probs.std(axis=0)
+    # Reshape back to [n_passes, batch_size, num_classes]
+    all_probs = all_probs.reshape(n_passes, batch_size, -1)
+    
+    # We only care about the first image in the batch since we are in single-predict context
+    # or we handle all images if we want to. But model_service usually gets 1 image per request.
+    mean_probs = all_probs.mean(axis=0)[0]
+    std_probs = all_probs.std(axis=0)[0]
 
     return mean_probs, std_probs
 
@@ -149,30 +154,12 @@ def apply_confidence_policy(confidence_score: float, uncertainty: float) -> dict
         }
 
 
-def generate_gradcam(model, pixel_values, original_image, target_class):
+def generate_gradcam(cam, pixel_values, original_image, target_class):
     """
     Grad-CAM using pytorch-grad-cam + ViT reshape transform.
-    Target layer: last transformer block's layernorm_before.
     """
-    from pytorch_grad_cam import GradCAM
     from pytorch_grad_cam.utils.image import show_cam_on_image
     from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
-    class ModelWrapper(nn.Module):
-        def __init__(self, m):
-            super().__init__()
-            self.model = m
-        def forward(self, x):
-            return self.model(pixel_values=x).logits
-
-    wrapped = ModelWrapper(model)
-    target_layers = [model.vit.encoder.layer[-1].layernorm_before]
-
-    cam = GradCAM(
-        model=wrapped,
-        target_layers=target_layers,
-        reshape_transform=vit_reshape_transform,
-    )
 
     targets = [ClassifierOutputTarget(target_class)]
     grayscale_cam = cam(input_tensor=pixel_values, targets=targets)[0]
@@ -219,6 +206,23 @@ class BrainTumorPredictor:
             (k for k, v in self.id2label.items() if "notumor" in v.lower()), 2
         )
 
+        # Initialize GradCAM singleton for this replica
+        from pytorch_grad_cam import GradCAM
+        class ModelWrapper(nn.Module):
+            def __init__(self, m):
+                super().__init__()
+                self.model = m
+            def forward(self, x):
+                return self.model(pixel_values=x).logits
+
+        wrapped = ModelWrapper(self.model)
+        target_layers = [self.model.vit.encoder.layer[-1].layernorm_before]
+        self.cam = GradCAM(
+            model=wrapped,
+            target_layers=target_layers,
+            reshape_transform=vit_reshape_transform,
+        )
+
         # Load model metadata for version
         self.model_version = "v0.1.0"
         try:
@@ -263,7 +267,7 @@ class BrainTumorPredictor:
         gradcam_b64 = None
         try:
             overlay_np = generate_gradcam(
-                self.model, pixel_values, pil_image, pred_idx
+                self.cam, pixel_values, pil_image, pred_idx
             )
             from io import BytesIO
             buf = BytesIO()

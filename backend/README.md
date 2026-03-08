@@ -1,65 +1,71 @@
-# Candor Dust - Backend Service
+# ⚙️ Candor Dust - Backend API & System Design
 
-## 🏛️ System Overview
-
-The **Candor Dust Backend** is a high-performance REST API built with **FastAPI**. it serves as the central orchestrator for the clinical workflow, managing security, data persistence, and AI model communication.
-
-### Core Features
-- **Advanced RBAC (Role-Based Access Control)**: 
-  - **Admin**: System-wide oversight, user management, and detailed audit logs.
-  - **Doctor**: Management of assigned patients and initiation of scan predictions.
-  - **Patient**: Secure access to personal scan history and results.
-- **AI Orchestration Pipeline**: 
-  - Handles image upload and asynchronous prediction queuing.
-  - Communicates with the ViT model service via a localized client.
-  - Implements a tiered confidence policy (Low confidence triggers mandatory human review).
-- **Audit Logging**: Every sensitive action (logins, deletions, diagnosis changes) is recorded in a tamper-resistant audit trail.
-- **Real-time Synchronization**: Uses **WebSockets** to push scan processing updates (status changes, completion) directly to the frontend.
-- **Background Processing**: Implements an internal task queue to handle CPU/GPU intensive inference without blocking the main event loop.
-
-## 🛠️ Configuration (.env)
-
-The backend expects a `.env` file in the `backend/` directory with the following keys:
-
-| Variable | Description | Default / Example |
-|----------|-------------|-------------------|
-| `DATABASE_URL` | The SQLAlchemy connection string. | `sqlite:///./candor_dust.db` |
-| `SECRET_KEY` | A long random string used for JWT signature. | *REQUIRED* |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token validity period. | `30` |
-| `MODEL_SERVICE_URL` | Endpoint of the running Model Service. | `http://localhost:8001/predict` |
-| `WS_NOTIFICATION_RETRY` | Number of retries for WebSocket messages. | `3` |
-
-## 🚀 Deployment & Local Run
-
-### Local Development (using `uv`)
-We use **uv** for blazing-fast dependency management and environment isolation.
-
-1. **Setup Environment**:
-   ```bash
-   uv sync
-   ```
-2. **Launch API Server**:
-   ```bash
-   uv run fastapi run src
-   ```
-   *The server will be available at http://localhost:8000. Interactive docs at /docs.*
-
-### Using Docker
-The backend is containerized for seamless deployment.
-
-1. **Build**:
-   ```bash
-   docker build -t candor-backend ./backend
-   ```
-2. **Run**:
-   ```bash
-   docker run -d -p 8000:8000 --env-file ./backend/.env candor-backend
-   ```
-
-## 🔌 Technical Layer
-- **ORM**: SQLAlchemy with Pydantic for data validation.
-- **Inference Client**: A dedicated `model_client.py` handles communication with the Ray-served ViT model.
-- **Security**: Passlib with Bcrypt for secure password hashing.
+The **Candor Dust Backend** is the industrial core of the system. Built with **FastAPI**, it provides a secure, auditable gateway between clinical users and the AI inference engine.
 
 ---
-*For the frontend interface, see the [frontend/README.md](../frontend/README.md).*
+
+## 🏗️ System Design & Architecture
+
+The backend follows a modular monolith architecture, designed for reliability and future scalability.
+
+### Core Modules
+- **`models.py`**: Relational data schema (Users, Scans, AuditLogs, Invitations) using SQLAlchemy.
+- **`auth.py`**: JWT-based security with fine-grained RBAC (Admin, Doctor, Patient).
+- **`task_queue.py`**: An asynchronous, in-process task scheduler that manages the scan lifecycle (Pending -> Processing -> Completed).
+- **`model_client.py`**: A dedicated client wrapper that handles HTTP communication, retries, and data formatting for the Ray Serve model service.
+
+### The Scan Lifecycle
+1. **Upload**: Doctor uploads an MRI via `POST /api/predict`.
+2. **Persistence**: The raw image is saved as a secure Blob in the database; a `Scan` record is created with `status="PENDING"`.
+3. **Queueing**: The scan ID is pushed to the internal `prediction_queue`.
+4. **Inference**: A background worker picks up the task, calls the Model Service, and receives predictions + Grad-CAM data.
+5. **Finalization**: The database is updated with results, and a notification is pushed via **WebSockets**.
+
+---
+
+## 🔒 Security & RBAC
+
+| Role | Permissions |
+|------|-------------|
+| **Admin** | Full system control, user creation/deletion, view all audit logs. |
+| **Doctor** | Upload scans, review predictions, manage patients, view statistics. |
+| **Patient** | View personal scan history and validated results. |
+
+- **Authentication**: JWT (JSON Web Tokens) with 30-minute expiration.
+- **Passwords**: Hashed using `bcrypt`.
+- **Authorization**: Role-based dependency injection in FastAPI routes.
+
+---
+
+## 📜 Audit Logging & Traceability
+
+Trust is built on accountability. Every significant action is recorded in the `audit_logs` table:
+- User ID of the actor.
+- Action type (e.g., `scan_queued`, `review_completed`, `user_deleted`).
+- Timestamp & IP Address.
+- Metadata (Scan IDs, previous status, etc.).
+
+---
+
+## 🔌 API Specifications (Summary)
+
+### Scans & Predictions
+- `GET /scans`: Retrieve scan history (filtered by role).
+- `GET /scans/{id}`: Full detail including Grad-CAM and inputs.
+- `POST /predict`: Unified upload and inference entry point.
+- `POST /scans/{id}/review`: Submit clinical review and notes.
+
+### Patients & Users
+- `GET /patients`: Summary of all patients with scan counts and last activity.
+- `POST /register`: Onboard new users.
+- `DELETE /users/{id}`: Managed deletion with cascade removal of associated health data.
+
+---
+
+## 🛠️ Performance & Scalability
+- **Asynchronicity**: Fully leverages Python's `async/await` for high-throughput I/O.
+- **Streaming Image Handling**: Images are processed as binary streams to minimize memory footprint.
+- **Ray Integration**: Offloading heavy computation (ViT inference) to a separate Ray-managed service allows the API to remain responsive under heavy load.
+
+---
+*For model-specific details, see [model/README.md](../model/README.md).*

@@ -19,8 +19,8 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships - specify foreign_keys to avoid ambiguity
-    scans = relationship("Scan", back_populates="user", foreign_keys="Scan.user_id")
-    audit_logs = relationship("AuditLog", back_populates="user")
+    scans = relationship("Scan", back_populates="user", foreign_keys="Scan.user_id", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
 
 
 class Scan(Base):

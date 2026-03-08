@@ -51,19 +51,19 @@ services:
         DOCKER_BUILDKIT: 1
     container_name: candor_dust_model
     restart: unless-stopped
+    shm_size: '2gb'
     environment:
       - MODEL_PATH=diwaskunwar10/brain-tumor-vit-candor
       - REPLICAS=1
     networks:
       - candor_network
-    # Uncomment below for GPU support:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 networks:
   candor_network:

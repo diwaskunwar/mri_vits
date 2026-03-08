@@ -40,8 +40,12 @@ httpClient.interceptors.request.use(
 httpClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Don't redirect on 401 for GET requests (like search)
-    if (error.response?.status === 401 && error.config?.method !== 'get') {
+    // Don't redirect on 401 for GET requests or actual login request
+    if (
+      error.response?.status === 401 &&
+      error.config?.method !== 'get' &&
+      !error.config?.url?.includes('/api/auth/login')
+    ) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       window.location.href = '/login';
